@@ -14,7 +14,92 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clients: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          email: string
+          id: string
+          name: string
+          password: string
+          phone: string | null
+          username: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          email: string
+          id?: string
+          name: string
+          password: string
+          phone?: string | null
+          username: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          name?: string
+          password?: string
+          phone?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
+      invoices: {
+        Row: {
+          amount: number
+          client_id: string
+          created_at: string | null
+          currency: string
+          description: string
+          due_date: string
+          id: string
+          invoice_number: string
+          myfatoorah_invoice_id: string | null
+          payment_link: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          created_at?: string | null
+          currency?: string
+          description: string
+          due_date: string
+          id?: string
+          invoice_number: string
+          myfatoorah_invoice_id?: string | null
+          payment_link?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          created_at?: string | null
+          currency?: string
+          description?: string
+          due_date?: string
+          id?: string
+          invoice_number?: string
+          myfatoorah_invoice_id?: string | null
+          payment_link?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
