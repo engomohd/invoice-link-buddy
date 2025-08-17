@@ -9,8 +9,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { authService } from "@/lib/auth"
-import { invoiceStorage, clientStorage } from "@/lib/invoice-storage"
-import { myfatoorahService } from "@/lib/myfatoorah"
+import { supabaseServices } from "@/lib/supabase-services"
 import { Invoice, Client } from "@/types/invoice"
 import { LogOut, Plus, FileText, Users, DollarSign, CreditCard, Edit, Trash2, ExternalLink } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -49,11 +48,13 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     loadData()
   }, [])
 
-  const loadData = () => {
+  const loadData = async () => {
     setIsLoading(true)
     try {
-      const allInvoices = invoiceStorage.getAllInvoices()
-      const allClients = clientStorage.getAllClients()
+      const [allInvoices, allClients] = await Promise.all([
+        supabaseServices.getInvoices(),
+        supabaseServices.getClients()
+      ])
       setInvoices(allInvoices)
       setClients(allClients)
     } catch (error) {
@@ -79,68 +80,42 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       return
     }
 
-    const client = clients.find(c => c.id === newInvoice.clientId)
-    if (!client) {
-      toast({
-        title: "Error",
-        description: "Selected client not found",
-        variant: "destructive",
-      })
-      return
-    }
-
     setIsCreatingPaymentLink(true)
 
     try {
-      // Create payment link with MyFatoorah
-      const paymentRequest = {
-        amount: parseFloat(newInvoice.amount),
-        currency: newInvoice.currency,
-        customerName: client.name,
-        customerEmail: client.email,
-        customerMobile: client.phone,
-        description: newInvoice.description,
-        language: 'en' as const
-      }
-
-      const paymentResponse = await myfatoorahService.createPaymentLink(paymentRequest)
-
-      // Generate invoice number
-      const invoiceNumber = `INV-${(invoices.length + 1).toString().padStart(3, '0')}`
-
-      // Create invoice
-      const invoice = invoiceStorage.createInvoice({
-        clientId: client.id,
-        clientName: client.name,
-        clientEmail: client.email,
-        invoiceNumber,
+      const result = await supabaseServices.createPaymentLink({
+        clientId: newInvoice.clientId,
         description: newInvoice.description,
         amount: parseFloat(newInvoice.amount),
         currency: newInvoice.currency,
-        status: 'pending',
-        dueDate: newInvoice.dueDate,
-        paymentLink: paymentResponse.paymentURL,
-        myfatoorahInvoiceId: paymentResponse.invoiceId.toString()
+        dueDate: newInvoice.dueDate
       })
 
-      setInvoices(prev => [...prev, invoice])
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create payment link')
+      }
+
+      // Refresh data
+      await loadData()
+      
       setShowCreateInvoice(false)
       setNewInvoice({
         clientId: '',
         description: '',
         amount: '',
-        currency: 'USD',
+        currency: 'KWD',
         dueDate: ''
       })
 
       toast({
         title: "Invoice created successfully",
-        description: `Invoice ${invoiceNumber} created with payment link`,
+        description: "Invoice created with payment link! Email sent to client.",
       })
     } catch (error) {
+      console.error('Error creating invoice:', error)
       toast({
         title: "Error",
-        description: "Failed to create invoice and payment link",
+        description: error instanceof Error ? error.message : "Failed to create invoice and payment link",
         variant: "destructive",
       })
     } finally {
@@ -148,7 +123,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
   }
 
-  const handleCreateClient = (e: React.FormEvent) => {
+  const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!newClient.username || !newClient.password || !newClient.name || !newClient.email) {
@@ -170,22 +145,34 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
       return
     }
 
-    const client = clientStorage.createClient(newClient)
-    setClients(prev => [...prev, client])
-    setShowCreateClient(false)
-    setNewClient({
-      username: '',
-      password: '',
-      name: '',
-      email: '',
-      phone: '',
-      company: ''
-    })
+    try {
+      setIsLoading(true)
+      const client = await supabaseServices.createClient(newClient)
+      setClients(prev => [...prev, client])
+      setShowCreateClient(false)
+      setNewClient({
+        username: '',
+        password: '',
+        name: '',
+        email: '',
+        phone: '',
+        company: ''
+      })
 
-    toast({
-      title: "Client created successfully",
-      description: `Client ${client.name} has been added`,
-    })
+      toast({
+        title: "Client created successfully",
+        description: `Client ${client.name} has been added`,
+      })
+    } catch (error) {
+      console.error('Error creating client:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create client",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleLogout = () => {

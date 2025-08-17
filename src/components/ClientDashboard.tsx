@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { authService } from "@/lib/auth"
-import { invoiceStorage } from "@/lib/invoice-storage"
+import { supabaseServices } from "@/lib/supabase-services"
 import { Invoice } from "@/types/invoice"
 import { LogOut, FileText, CreditCard, Calendar, ExternalLink, DollarSign } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -23,12 +23,12 @@ export function ClientDashboard({ onLogout }: ClientDashboardProps) {
     loadInvoices()
   }, [])
 
-  const loadInvoices = () => {
+  const loadInvoices = async () => {
     if (!currentUser) return
     
     setIsLoading(true)
     try {
-      const clientInvoices = invoiceStorage.getClientInvoices(currentUser.id)
+      const clientInvoices = await supabaseServices.getInvoicesByClient(currentUser.id)
       setInvoices(clientInvoices)
     } catch (error) {
       toast({
