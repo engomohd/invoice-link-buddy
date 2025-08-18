@@ -45,16 +45,19 @@ export const authService = {
   // Client login
   loginClient: async (username: string, password: string): Promise<Client | null> => {
     try {
+      // First find the client in our database
       const client = await supabaseServices.getClientByCredentials(username, password)
       if (client) {
-        // Sign in with Supabase Auth using client's email and a default password
+        // Sign in with Supabase Auth using client's email
         const { error } = await supabase.auth.signInWithPassword({
           email: client.email,
-          password: 'client123' // Default password for clients
+          password: 'client123' // Default password for all clients
         })
         
         if (!error) {
           return client
+        } else {
+          console.error('Supabase auth error:', error)
         }
       }
     } catch (error) {
