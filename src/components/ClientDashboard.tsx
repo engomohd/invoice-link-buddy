@@ -14,26 +14,28 @@ interface ClientDashboardProps {
 
 export function ClientDashboard({ onLogout }: ClientDashboardProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
-  
-  const currentUser = authService.getCurrentUser()
 
   useEffect(() => {
-    loadInvoices()
+    loadUserAndInvoices()
   }, [])
 
-  const loadInvoices = async () => {
-    if (!currentUser) return
-    
+  const loadUserAndInvoices = async () => {
     setIsLoading(true)
     try {
-      const clientInvoices = await supabaseServices.getInvoicesByClient(currentUser.id)
-      setInvoices(clientInvoices)
+      const user = await authService.getCurrentUser()
+      setCurrentUser(user)
+      
+      if (user) {
+        const clientInvoices = await supabaseServices.getInvoicesByClient(user.id)
+        setInvoices(clientInvoices)
+      }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load invoices",
+        description: "Failed to load data",
         variant: "destructive",
       })
     } finally {

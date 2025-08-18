@@ -11,24 +11,30 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Initialize sample data
-    initializeSampleData()
+    const checkAuth = async () => {
+      // Initialize sample data and admin
+      initializeSampleData()
+      await authService.initializeAdmin()
+      
+      // Check if user is already logged in
+      const authenticated = await authService.isAuthenticated()
+      const adminStatus = authenticated ? await authService.isAdmin() : false
+      
+      setIsAuthenticated(authenticated)
+      setIsAdmin(adminStatus)
+      setIsLoading(false)
+    }
     
-    // Check if user is already logged in
-    const authenticated = authService.isAuthenticated()
-    const adminStatus = authService.isAdmin()
-    
-    setIsAuthenticated(authenticated)
-    setIsAdmin(adminStatus)
-    setIsLoading(false)
+    checkAuth()
   }, [])
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setIsAuthenticated(true)
-    setIsAdmin(authService.isAdmin())
+    setIsAdmin(await authService.isAdmin())
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await authService.logout()
     setIsAuthenticated(false)
     setIsAdmin(false)
   }

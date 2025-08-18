@@ -1,59 +1,93 @@
+import { supabase } from "@/integrations/supabase/client"
+import { supabaseServices } from "@/lib/supabase-services"
 import { Client } from "@/types/invoice"
 
-// Mock authentication - replace with your backend integration
 export const authService = {
   // Get current logged in user
-  getCurrentUser: (): Client | null => {
-    const user = localStorage.getItem('currentUser')
-    return user ? JSON.parse(user) : null
-  },
-
-  // Admin login
-  loginAdmin: (username: string, password: string): boolean => {
-    // Mock admin credentials - replace with your backend
-    if (username === 'admin' && password === 'admin123') {
-      const admin = {
-        id: 'admin',
+  getCurrentUser: async (): Promise<Client | null> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+    
+    // Check if user is admin
+    if (user.email === 'admin@invoices.com') {
+      return {
+        id: user.id,
         username: 'admin',
         password: '',
         name: 'Administrator',
-        email: 'admin@invoices.com',
-        createdAt: new Date().toISOString()
+        email: user.email!,
+        createdAt: user.created_at
       }
-      localStorage.setItem('currentUser', JSON.stringify(admin))
-      localStorage.setItem('userRole', 'admin')
-      return true
+    }
+    
+    // Get client data from database
+    try {
+      const clients = await supabaseServices.getClients()
+      return clients.find(c => c.email === user.email) || null
+    } catch (error) {
+      console.error('Error fetching client:', error)
+      return null
+    }
+  },
+
+  // Admin login
+  loginAdmin: async (username: string, password: string): Promise<boolean> => {
+    if (username === 'admin' && password === 'admin123') {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'admin@invoices.com',
+        password: 'admin123'
+      })
+      return !error
     }
     return false
   },
 
   // Client login
-  loginClient: (username: string, password: string): Client | null => {
-    // Get clients from localStorage - replace with your backend
-    const clients = JSON.parse(localStorage.getItem('clients') || '[]')
-    const client = clients.find((c: Client) => c.username === username && c.password === password)
-    
-    if (client) {
-      localStorage.setItem('currentUser', JSON.stringify(client))
-      localStorage.setItem('userRole', 'client')
-      return client
+  loginClient: async (username: string, password: string): Promise<Client | null> => {
+    try {
+      const client = await supabaseServices.getClientByCredentials(username, password)
+      if (client) {
+        // Sign in with Supabase Auth using client's email and a default password
+        const { error } = await supabase.auth.signInWithPassword({
+          email: client.email,
+          password: 'client123' // Default password for clients
+        })
+        
+        if (!error) {
+          return client
+        }
+      }
+    } catch (error) {
+      console.error('Client login error:', error)
     }
     return null
   },
 
   // Logout
-  logout: () => {
-    localStorage.removeItem('currentUser')
-    localStorage.removeItem('userRole')
+  logout: async () => {
+    await supabase.auth.signOut()
   },
 
   // Check if user is admin
-  isAdmin: (): boolean => {
-    return localStorage.getItem('userRole') === 'admin'
+  isAdmin: async (): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    return user?.email === 'admin@invoices.com'
   },
 
   // Check if user is authenticated
-  isAuthenticated: (): boolean => {
-    return localStorage.getItem('currentUser') !== null
+  isAuthenticated: async (): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser()
+    return !!user
+  },
+
+  // Initialize admin user
+  initializeAdmin: async () => {
+    const { error } = await supabase.auth.signUp({
+      email: 'admin@invoices.com',
+      password: 'admin123'
+    })
+    if (error && !error.message.includes('already registered')) {
+      console.error('Error creating admin user:', error)
+    }
   }
 }

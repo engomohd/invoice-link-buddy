@@ -23,7 +23,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     setIsLoading(true)
 
     try {
-      const client = authService.loginClient(clientCredentials.username, clientCredentials.password)
+      const client = await authService.loginClient(clientCredentials.username, clientCredentials.password)
       if (client) {
         toast({
           title: "Welcome back!",
@@ -53,7 +53,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
     setIsLoading(true)
 
     try {
-      const success = authService.loginAdmin(adminCredentials.username, adminCredentials.password)
+      const success = await authService.loginAdmin(adminCredentials.username, adminCredentials.password)
       if (success) {
         toast({
           title: "Admin access granted",
