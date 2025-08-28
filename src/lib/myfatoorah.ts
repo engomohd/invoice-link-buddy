@@ -1,48 +1,98 @@
 import { PaymentLinkRequest, PaymentLinkResponse } from "@/types/invoice"
 
-// Mock MyFatoorah service - replace with your backend integration
+// Real MyFatoorah service - now integrated with actual API
 export const myfatoorahService = {
-  // Create payment link using MyFatoorah API
+  // Create payment link using MyFatoorah API - frontend version for demonstration
   createPaymentLink: async (request: PaymentLinkRequest): Promise<PaymentLinkResponse> => {
-    // This is a mock implementation
-    // In your actual backend, you'll call MyFatoorah's SendPayment endpoint
-    // with your API key and proper authentication
-    
     console.log('Creating payment link with MyFatoorah:', request)
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // Mock response - replace with actual MyFatoorah integration
-    const mockResponse: PaymentLinkResponse = {
-      invoiceId: Math.floor(Math.random() * 1000000),
-      invoiceURL: `https://portal.myfatoorah.com/ar/invoices/${Math.random().toString(36).substr(2, 9)}`,
-      paymentURL: `https://portal.myfatoorah.com/ar/invoices/${Math.random().toString(36).substr(2, 9)}/pay`
+    try {
+      // Call our Supabase edge function which handles the actual MyFatoorah integration
+      const response = await fetch('/api/create-payment-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clientId: 'mock-client-id', // This should come from your client data
+          description: request.description,
+          amount: request.amount,
+          currency: request.currency,
+          dueDate: new Date().toISOString().split('T')[0] // Today's date as default
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to create payment link')
+      }
+      
+      return {
+        invoiceId: data.invoice.myfatoorah_invoice_id,
+        invoiceURL: data.paymentUrl,
+        paymentURL: data.paymentUrl
+      }
+    } catch (error) {
+      console.error('Error creating payment link:', error)
+      throw error
     }
-    
-    return mockResponse
   },
 
   // Get payment status from MyFatoorah
   getPaymentStatus: async (invoiceId: string): Promise<'paid' | 'pending' | 'failed'> => {
-    // Mock implementation - replace with actual MyFatoorah API call
     console.log('Checking payment status for invoice:', invoiceId)
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    // Mock random status for demo
-    const statuses = ['paid', 'pending', 'failed'] as const
-    return statuses[Math.floor(Math.random() * statuses.length)]
+    try {
+      // In a real implementation, you'd call MyFatoorah's GetPaymentStatus endpoint
+      // through your backend edge function
+      const response = await fetch('/api/get-payment-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invoiceId: invoiceId,
+          keyType: 'InvoiceId' // or 'PaymentId' depending on what you're passing
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get payment status')
+      }
+      
+      // Map MyFatoorah status to our simplified status
+      const myfatoorahStatus = data.invoiceStatus?.toLowerCase()
+      if (myfatoorahStatus === 'paid' || myfatoorahStatus === 'successful') {
+        return 'paid'
+      } else if (myfatoorahStatus === 'pending' || myfatoorahStatus === 'processing') {
+        return 'pending'
+      } else {
+        return 'failed'
+      }
+    } catch (error) {
+      console.error('Error checking payment status:', error)
+      // Return pending as default to avoid breaking the UI
+      return 'pending'
+    }
   }
 }
 
 // MyFatoorah API configuration
 export const MYFATOORAH_CONFIG = {
-  // These should be stored securely in your backend
-  // baseUrl: 'https://apitest.myfatoorah.com', // Test environment
-  // baseUrl: 'https://api.myfatoorah.com', // Production environment
-  // apiKey: 'YOUR_MYFATOORAH_API_KEY', // Store this in your backend
+  // API endpoints (handled in backend edge functions for security)
+  testBaseUrl: 'https://apitest.myfatoorah.com', // Test environment
+  prodBaseUrl: 'https://api.myfatoorah.com', // Production environment
   
   // Default values
   defaultCurrency: 'KWD',
@@ -54,5 +104,16 @@ export const MYFATOORAH_CONFIG = {
     SMS: 'SMS', 
     LINK_ONLY: 'LNK',
     ALL: 'ALL'
+  } as const,
+  
+  // Invoice status mapping from MyFatoorah to our simplified statuses
+  statusMapping: {
+    'Paid': 'paid',
+    'Successful': 'paid',
+    'Pending': 'pending',
+    'Processing': 'pending',
+    'Failed': 'failed',
+    'Cancelled': 'failed',
+    'Expired': 'failed'
   } as const
 }

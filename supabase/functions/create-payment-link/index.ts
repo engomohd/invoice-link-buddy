@@ -51,11 +51,19 @@ const handler = async (req: Request): Promise<Response> => {
       InvoiceValue: amount,
       CurrencyIso: currency,
       DisplayCurrencyIso: currency,
-      MobileCountryCode: '965',
+      MobileCountryCode: '965', // Kuwait country code - adjust as needed
       CallBackUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/payment-callback`,
       ErrorUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/payment-error`,
       Language: 'en',
-      NotificationOption: 'LNK'
+      NotificationOption: 'LNK', // Link only notification
+      UserDefinedField: description,
+      InvoiceItems: [
+        {
+          ItemName: description,
+          Quantity: 1,
+          UnitPrice: amount
+        }
+      ]
     };
 
     console.log('Creating MyFatoorah payment link:', myfatoorahPayload);
