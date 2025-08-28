@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.payment-error]
 verify_jwt = false
+
+[functions.create-client]
+verify_jwt = false

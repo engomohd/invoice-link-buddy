@@ -17,23 +17,23 @@ export const supabaseServices = {
   },
 
   async createClient(client: Omit<Client, 'id' | 'createdAt'>): Promise<Client> {
-    const { data, error } = await supabase
-      .from('clients')
-      .insert({
+    const { data, error } = await supabase.functions.invoke('create-client', {
+      body: {
         username: client.username,
         password: client.password,
         name: client.name,
         email: client.email,
         phone: client.phone,
         company: client.company
-      })
-      .select()
-      .single();
+      }
+    });
     
     if (error) throw error;
+    if (!data.success) throw new Error(data.error || 'Failed to create client');
+    
     return {
-      ...data,
-      createdAt: data.created_at
+      ...data.client,
+      createdAt: data.client.created_at
     };
   },
 
