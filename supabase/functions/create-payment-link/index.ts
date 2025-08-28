@@ -38,54 +38,72 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error('Client not found');
     }
 
-    // Create MyFatoorah payment link
-    const myfatoorahApiKey = Deno.env.get('MYFATOORAH_API_KEY');
-    if (!myfatoorahApiKey) {
-      throw new Error('MyFatoorah API key not configured');
-    }
-
-    const myfatoorahPayload = {
-      CustomerName: client.name,
-      CustomerEmail: client.email,
-      CustomerMobile: client.phone || '',
-      InvoiceValue: amount,
-      CurrencyIso: currency,
-      DisplayCurrencyIso: currency,
-      MobileCountryCode: '965', // Kuwait country code - adjust as needed
-      CallBackUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/payment-callback`,
-      ErrorUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/payment-error`,
-      Language: 'en',
-      NotificationOption: 'LNK', // Link only notification
-      UserDefinedField: description,
-      InvoiceItems: [
-        {
-          ItemName: description,
-          Quantity: 1,
-          UnitPrice: amount
-        }
-      ]
-    };
-
-    console.log('Creating MyFatoorah payment link:', myfatoorahPayload);
-
-    const myfatoorahResponse = await fetch('https://apitest.myfatoorah.com/v2/SendPayment', {
+    // First authenticate to get token
+    const username = 'apiaccount@myfatoorah.com';
+    const password = 'api12345*';
+    
+    console.log('Authenticating with MyFatoorah...');
+    
+    const tokenResponse = await fetch('https://apidemo.myfatoorah.com/Token', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${myfatoorahApiKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: JSON.stringify(myfatoorahPayload)
+      body: `grant_type=password&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
     });
 
-    const myfatoorahData = await myfatoorahResponse.json();
-    console.log('MyFatoorah response:', myfatoorahData);
+    const tokenData = await tokenResponse.json();
+    console.log('Token response:', tokenData);
 
-    if (!myfatoorahResponse.ok || !myfatoorahData.IsSuccess) {
-      throw new Error(`MyFatoorah error: ${myfatoorahData.Message}`);
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      throw new Error(`Authentication failed: ${tokenData.error_description || 'Unknown error'}`);
     }
 
     // Generate invoice number
     const invoiceNumber = `INV-${Date.now()}`;
+
+    // Create invoice with MyFatoorah ISO API
+    const invoicePayload = {
+      InvoiceValue: amount,
+      CustomerName: client.name,
+      CustomerEmail: client.email,
+      CustomerMobile: client.phone || '12345678',
+      CustomerReference: client.id,
+      DisplayCurrencyIsoAlpha: currency,
+      CountryCodeId: 1, // Kuwait
+      SendInvoiceOption: 4, // All options (SMS, Email, Link)
+      InvoiceItemsCreate: [
+        {
+          ProductId: null,
+          ProductName: description,
+          Quantity: 1,
+          UnitPrice: amount
+        }
+      ],
+      CallBackUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/payment-callback`,
+      ErrorUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/payment-error`,
+      Language: 2, // English
+      ExpireDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
+      ApiCustomFileds: `Invoice: ${invoiceNumber}`
+    };
+
+    console.log('Creating invoice with MyFatoorah ISO API:', { ...invoicePayload, CustomerMobile: 'XXX' });
+
+    const myfatoorahResponse = await fetch('https://apidemo.myfatoorah.com/ApiInvoices/CreateInvoiceIso', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(invoicePayload)
+    });
+
+    const myfatoorahData = await myfatoorahResponse.json();
+    console.log('MyFatoorah ISO response:', myfatoorahData);
+
+    if (!myfatoorahResponse.ok || !myfatoorahData.IsSuccess) {
+      throw new Error(`MyFatoorah error: ${myfatoorahData.Message || 'Unknown error'}`);
+    }
 
     // Create invoice in database
     const { data: invoice, error: invoiceError } = await supabase
@@ -97,8 +115,8 @@ const handler = async (req: Request): Promise<Response> => {
         amount,
         currency,
         due_date: dueDate,
-        payment_link: myfatoorahData.Data.InvoiceURL,
-        myfatoorah_invoice_id: myfatoorahData.Data.InvoiceId.toString(),
+        payment_link: myfatoorahData.RedirectUrl,
+        myfatoorah_invoice_id: myfatoorahData.Id.toString(),
         status: 'pending'
       })
       .select()
@@ -116,7 +134,7 @@ const handler = async (req: Request): Promise<Response> => {
         invoiceNumber,
         amount,
         currency,
-        paymentUrl: myfatoorahData.Data.InvoiceURL,
+        paymentUrl: myfatoorahData.RedirectUrl,
         description,
         dueDate
       }
@@ -127,7 +145,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(JSON.stringify({
       success: true,
       invoice,
-      paymentUrl: myfatoorahData.Data.InvoiceURL
+      paymentUrl: myfatoorahData.RedirectUrl
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200
